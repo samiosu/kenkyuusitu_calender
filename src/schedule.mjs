@@ -120,7 +120,9 @@ export function normalizeSchedule(input) {
         fail(`${sessionPath}.date`, '見学日程は1900-01-01〜2100-12-31の範囲で指定してください。');
       }
       const startMinutes = minutes(rawSession.start, `${sessionPath}.start`);
-      const endMinutes = minutes(rawSession.end, `${sessionPath}.end`);
+      // Keep an unknown end as '' in the source data; only its visual slot is one hour.
+      const endUnknown = rawSession.end === '';
+      const endMinutes = endUnknown ? startMinutes + 60 : minutes(rawSession.end, `${sessionPath}.end`);
       if (endMinutes <= startMinutes) fail(`${sessionPath}.end`, '終了時刻は同日の開始時刻より後にしてください。');
       const location = text(rawSession.location, `${sessionPath}.location`, 200, true);
       const note = text(rawSession.note, `${sessionPath}.note`, 2000, true);
@@ -129,7 +131,7 @@ export function normalizeSchedule(input) {
       }
       const reservationRequired = rawSession.reservationRequired ?? false;
       const session = { id: sessionId, date, start: rawSession.start, end: rawSession.end, location, note, reservationRequired };
-      events.push({ ...session, id: `${id}:${sessionId}`, labId: id, labName: name, category, description, url, startMinutes, endMinutes });
+      events.push({ ...session, id: `${id}:${sessionId}`, labId: id, labName: name, category, description, url, startMinutes, endMinutes, endUnknown });
       return session;
     });
     return { id, name, category, description, url, sessions };
@@ -195,12 +197,17 @@ export function layoutDayEvents(events) {
 }
 
 export function findConflicts(events) {
-  const sorted = orderedEvents(events);
+  // A provisional one-hour slot can extend past midnight. Compare absolute minutes
+  // so a visit on the following date can still overlap it.
+  const sorted = orderedEvents(events).map((event) => {
+    const dayMinutes = Date.parse(`${event.date}T00:00:00Z`) / 60000;
+    return { id: event.id, start: dayMinutes + event.startMinutes, end: dayMinutes + event.endMinutes };
+  });
   const pairs = [];
   for (let i = 0; i < sorted.length; i += 1) {
     for (let j = i + 1; j < sorted.length; j += 1) {
-      if (sorted[j].date !== sorted[i].date || sorted[j].startMinutes >= sorted[i].endMinutes) break;
-      if (sorted[i].startMinutes < sorted[j].endMinutes) pairs.push([sorted[i].id, sorted[j].id]);
+      if (sorted[j].start >= sorted[i].end) break;
+      if (sorted[i].start < sorted[j].end) pairs.push([sorted[i].id, sorted[j].id]);
     }
   }
   return pairs;
@@ -238,11 +245,13 @@ export function createCalendar(events) {
   ];
   for (const event of orderedEvents(events)) {
     const localDate = event.date.replaceAll('-', '');
-    const description = [event.description, event.note, event.reservationRequired ? '要予約' : ''].filter(Boolean).join('\n\n');
+    const description = [event.description, event.note, event.reservationRequired ? '要予約' : '',
+      event.endUnknown ? '終了時刻は未定です。カレンダー上では1時間の仮枠として表示しています。' : '',
+    ].filter(Boolean).join('\n\n');
     lines.push('BEGIN:VEVENT', `UID:${icalText(event.id)}@lab-visit-planner.local`, `DTSTAMP:${timestamp}`,
-      `DTSTART;TZID=Asia/Tokyo:${localDate}T${event.start.replace(':', '')}00`,
-      `DTEND;TZID=Asia/Tokyo:${localDate}T${event.end.replace(':', '')}00`,
-      `SUMMARY:${icalText(event.labName)}`, `DESCRIPTION:${icalText(description)}`,
+      `DTSTART;TZID=Asia/Tokyo:${localDate}T${event.start.replace(':', '')}00`);
+    lines.push(event.endUnknown ? 'DURATION:PT1H' : `DTEND;TZID=Asia/Tokyo:${localDate}T${event.end.replace(':', '')}00`,
+      `SUMMARY:${icalText(event.labName + (event.endUnknown ? '（終了未定）' : ''))}`, `DESCRIPTION:${icalText(description)}`,
       `LOCATION:${icalText(event.location)}`);
     if (event.url) lines.push(`URL:${event.url}`);
     lines.push('END:VEVENT');

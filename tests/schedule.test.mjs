@@ -90,6 +90,52 @@ test('updatedAt accepts ISO dates and timestamps, rejecting rollovers and invali
   }
 });
 
+test('an empty end preserves uncertainty and reserves exactly one hour for layout', () => {
+  const input = document();
+  input.labs[0].sessions[0].end = '';
+  const before = structuredClone(input);
+  const normalized = normalizeSchedule(input);
+  const event = normalized.events[0];
+  assert.equal(event.end, '');
+  assert.equal(event.endUnknown, true);
+  assert.equal(event.endMinutes - event.startMinutes, 60);
+  assert.equal(normalized.labs[0].sessions[0].end, '');
+  assert.deepEqual(input, before);
+  assert.equal(eventsFrom([session()])[0].endUnknown, false);
+  for (const end of [undefined, null, ' ', 'unknown', '24:00']) {
+    assert.throws(() => eventsFrom([session({ end })]), /end.*時刻/);
+  }
+  const events = eventsFrom([
+    session({ id: 'unknown', end: '' }),
+    session({ id: 'during', start: '10:30', end: '10:45' }),
+    session({ id: 'after', start: '11:00', end: '12:00' }),
+  ]);
+  assert.deepEqual(findConflicts(events), [['sample-a:unknown', 'sample-a:during']]);
+  assert.deepEqual(layoutDayEvents(events).map(({ columnCount }) => columnCount), [2, 2, 1]);
+});
+
+test('an unknown end keeps its full one-hour slot and detects overlap across midnight', () => {
+  const events = eventsFrom([
+    session({ id: 'late', date: '2026-12-31', start: '23:30', end: '' }),
+    session({ id: 'early', date: '2027-01-01', start: '00:15', end: '00:30' }),
+    session({ id: 'after', date: '2027-01-01', start: '00:30', end: '01:00' }),
+  ]);
+  assert.equal(events[0].endMinutes, 1470);
+  assert.deepEqual(findConflicts(events), [['sample-a:late', 'sample-a:early']]);
+  const latest = eventsFrom([session({ start: '23:59', end: '' })])[0];
+  assert.equal(latest.endMinutes - latest.startMinutes, 60);
+});
+
+test('ICS exports an unknown end as an explicitly labelled one-hour placeholder', () => {
+  const calendar = createCalendar(eventsFrom([session({ start: '23:30', end: '' })]));
+  const unfolded = calendar.replaceAll('\r\n ', '');
+  assert.match(unfolded, /DTSTART;TZID=Asia\/Tokyo:20261015T233000\r\nDURATION:PT1H/);
+  assert.doesNotMatch(unfolded, /DTEND/);
+  assert.match(unfolded, /SUMMARY:サンプルA研究室（終了未定）/);
+  assert.match(unfolded, /終了時刻は未定です。.*1時間の仮枠/);
+  for (const line of calendar.split('\r\n')) assert.ok(Buffer.byteLength(line, 'utf8') <= 75);
+});
+
 test('imported sessions stay inside the supported calendar range while date helpers remain generic', () => {
   for (const date of ['0001-01-01', '0099-12-31', '1899-12-31', '2101-01-01', '9999-12-31']) {
     assert.throws(() => eventsFrom([session({ date })]), /date.*1900-01-01〜2100-12-31/);

@@ -34,7 +34,7 @@
       "description": "人とコンピューターの関わりを考える架空の研究室です。",
       "sessions": [
         { "id": "visit-1", "date": "2026-10-13", "start": "13:00", "end": "14:30", "location": "サンプル棟 B-103", "note": "インタラクティブな作品の体験を含みます。", "reservationRequired": true },
-        { "id": "visit-2", "date": "2026-10-15", "start": "13:00", "end": "14:00", "location": "サンプル棟 B-103", "reservationRequired": false },
+        { "id": "visit-2", "date": "2026-10-15", "start": "13:00", "end": "", "location": "サンプル棟 B-103", "note": "終了時刻が未定の見学のサンプルです。カレンダー上は1時間の仮枠で表示します。", "reservationRequired": false },
         { "id": "visit-3", "date": "2026-10-19", "start": "13:30", "end": "15:00", "location": "サンプル棟 B-103", "reservationRequired": true },
         { "id": "visit-4", "date": "2026-10-22", "start": "10:00", "end": "11:00", "location": "サンプル棟 B-103", "note": "研究室の雰囲気を知るオープン見学です。", "reservationRequired": false }
       ]

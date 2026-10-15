@@ -30,6 +30,9 @@ const state={data:null,sample:false,source:'',anchor:today,miniMonth:today.slice
 const weekdays=['月','火','水','木','金','土','日'];
 const dateObject=(date)=>new Date(date+'T12:00:00Z');
 const dateText=(date)=>new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',month:'long',day:'numeric',weekday:'short'}).format(dateObject(date));
+function eventTimeText(event) {
+  return event.endUnknown ? `${event.start}〜 終了未定` : `${event.start} – ${event.end}`;
+}
 function setColor(node,category){const [color,bg,ink]=state.colors.get(category)||palette[0];node.style.setProperty('--cat-color',color);node.style.setProperty('--cat-bg',bg);node.style.setProperty('--cat-ink',ink);}
 let toastTimer;
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>{$('#toast').hidden=true;},3600);}
@@ -56,12 +59,96 @@ function renderFilters(){const container=$('#category-filters');container.replac
 function filteredEvents(){if(!state.data)return[];const query=state.query.toLocaleLowerCase('ja-JP');return state.data.events.filter(e=>state.categories.has(e.category)&&(!state.planOnly||state.planned.has(e.id))&&(!query||[e.labName,e.category,e.location,e.note,e.description].some(v=>v.toLocaleLowerCase('ja-JP').includes(query))));}
 function selectedEvents(){return state.data?state.data.events.filter(e=>state.planned.has(e.id)):[];}
 function renderMini(){const first=state.miniMonth;const year=Number(first.slice(0,4)),month=Number(first.slice(5,7));$('#mini-month').textContent=`${year}年 ${month}月`;const grid=$('#mini-days');grid.replaceChildren();const start=getWeekDays(first)[0];const week=getWeekDays(state.anchor);const eventDates=new Set(state.data?.events.map(e=>e.date)||[]);for(let i=0;i<42;i++){const date=shiftDate(start,i);const day=button(String(Number(date.slice(8))),'',()=>{state.anchor=clampDate(date);if(date.slice(0,7)!==state.miniMonth.slice(0,7))state.miniMonth=date.slice(0,7)+'-01';render();});day.disabled=date<MIN_DATE||date>MAX_DATE;day.setAttribute('aria-label',new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',dateStyle:'full'}).format(dateObject(date)));day.setAttribute('aria-pressed',String(date===state.anchor));if(date===today){day.classList.add('is-today');day.setAttribute('aria-current','date');}if(date.slice(0,7)!==first.slice(0,7))day.classList.add('other-month');if(week.includes(date))day.classList.add('in-week');if(date===state.anchor)day.classList.add('is-selected');if(eventDates.has(date))day.classList.add('has-event');grid.append(day);}}
-function render(){renderMini();const days=getWeekDays(state.anchor);const start=days[0],end=days[6];const [year,month]=start.split('-');const endMonth=Number(end.slice(5,7));$('#period-title').textContent=`${year}年 ${Number(month)}月${endMonth!==Number(month)?` – ${end.slice(0,4)!==year?end.slice(0,4)+'年 ':''}${endMonth}月`:''}`;$('#period-title').title=`${dateText(start)}〜${dateText(end)}`;$('#week-view').setAttribute('aria-pressed',String(state.view==='week'));$('#list-view').setAttribute('aria-pressed',String(state.view==='list'));$('#plan-filter').setAttribute('aria-pressed',String(state.planOnly));$('#plan-count').textContent=state.planned.size;$('#sample-badge').hidden=!state.sample;$('#export-button').disabled=state.planned.size===0;$('#data-label').textContent=state.data?(state.sample?'サンプルを表示中':'データ読み込み済み'):'データ未読み込み';$('#data-label').closest('.data-card').classList.toggle('is-loaded',!!state.data);$('#data-description').textContent=state.data?`${state.data.labs.length}研究室・${state.data.events.length}件の予定${state.data.updatedAt?' / 更新 '+state.data.updatedAt.slice(0,10):''}`:'配布されたJSONファイルを読み込んではじめましょう。';const filtered=filteredEvents();const events=filtered.filter(e=>days.includes(e.date));$('#visible-count').textContent=`${Number(start.slice(5,7))}/${Number(start.slice(8))} – ${Number(end.slice(5,7))}/${Number(end.slice(8))} · ${state.planOnly?'候補':'見学'} ${events.length}件`;const conflicts=findConflicts(selectedEvents());const banner=$('#conflict-banner');banner.hidden=conflicts.length===0;banner.textContent=`マイプランに時間が重なる予定が${conflicts.length}組あります。予定を開いて確認してください。`;const content=$('#calendar-content');content.replaceChildren();if(!state.data){content.append(welcome());return;}if(!events.length){const empty=el('div','empty-filter');empty.append(icon(state.planOnly?'bookmark':'calendar'),el('h3','',state.planOnly?'今週の見学候補はまだありません':'この週に表示できる予定はありません'),el('p','',state.planOnly?'予定を開いて「見学候補に追加」してみましょう。':'別の週に移動するか、検索条件を変更してください。'));if(filtered.length){empty.append(button('予定のある週へ','button',()=>{state.anchor=(filtered.find(e=>e.date>=state.anchor)||filtered[0]).date;state.miniMonth=state.anchor.slice(0,7)+'-01';render();},'right'));}if(state.query||state.categories.size!==state.colors.size||state.planOnly)empty.append(button('絞り込みをリセット','text-button',resetFilters));content.append(empty);return;}content.append(state.view==='week'?weekCalendar(days,events,new Set(conflicts.flat())):agenda(events));}
+function render(){renderMini();const days=getWeekDays(state.anchor);const start=days[0],end=days[6];const [year,month]=start.split('-');const endMonth=Number(end.slice(5,7));$('#period-title').textContent=`${year}年 ${Number(month)}月${endMonth!==Number(month)?` – ${end.slice(0,4)!==year?end.slice(0,4)+'年 ':''}${endMonth}月`:''}`;$('#period-title').title=`${dateText(start)}〜${dateText(end)}`;$('#week-view').setAttribute('aria-pressed',String(state.view==='week'));$('#list-view').setAttribute('aria-pressed',String(state.view==='list'));$('#plan-filter').setAttribute('aria-pressed',String(state.planOnly));$('#plan-count').textContent=state.planned.size;$('#sample-badge').hidden=!state.sample;$('#export-button').disabled=state.planned.size===0;$('#data-label').textContent=state.data?(state.sample?'サンプルを表示中':'データ読み込み済み'):'データ未読み込み';$('#data-label').closest('.data-card').classList.toggle('is-loaded',!!state.data);$('#data-description').textContent=state.data?`${state.data.labs.length}研究室・${state.data.events.length}件の予定${state.data.updatedAt?' / 更新 '+state.data.updatedAt.slice(0,10):''}`:'配布されたJSONファイルを読み込んではじめましょう。';const filtered=filteredEvents();const events=filtered.filter(e=>days.includes(e.date));$('#visible-count').textContent=`${Number(start.slice(5,7))}/${Number(start.slice(8))} – ${Number(end.slice(5,7))}/${Number(end.slice(8))} · ${state.planOnly?'候補':'見学'} ${events.length}件`;const conflicts=findConflicts(selectedEvents());const banner=$('#conflict-banner');banner.hidden=conflicts.length===0;banner.textContent=`マイプランに時間が重なる予定が${conflicts.length}組あります。予定を開いて確認してください。`+(selectedEvents().some(e=>e.endUnknown)?' 終了未定の予定は1時間の仮枠で比較しています。':'');const content=$('#calendar-content');content.replaceChildren();if(!state.data){content.append(welcome());return;}if(!events.length){const empty=el('div','empty-filter');empty.append(icon(state.planOnly?'bookmark':'calendar'),el('h3','',state.planOnly?'今週の見学候補はまだありません':'この週に表示できる予定はありません'),el('p','',state.planOnly?'予定を開いて「見学候補に追加」してみましょう。':'別の週に移動するか、検索条件を変更してください。'));if(filtered.length){empty.append(button('予定のある週へ','button',()=>{state.anchor=(filtered.find(e=>e.date>=state.anchor)||filtered[0]).date;state.miniMonth=state.anchor.slice(0,7)+'-01';render();},'right'));}if(state.query||state.categories.size!==state.colors.size||state.planOnly)empty.append(button('絞り込みをリセット','text-button',resetFilters));content.append(empty);return;}content.append(state.view==='week'?weekCalendar(days,events,new Set(conflicts.flat())):agenda(events));}
 function welcome(){const wrapper=el('div','welcome-state');const card=el('div','welcome-card');const illustration=el('div','welcome-illustration');illustration.append(icon('calendar'));const badge=el('span');badge.append(icon('plus'));illustration.append(badge);const title=el('h3');title.append(document.createTextNode('予定を読み込んで、'),el('br'),document.createTextNode('見学の計画をはじめよう。'));const actions=el('div','welcome-actions');actions.append(button('JSONを読み込む','button primary',()=>openDialog($('#import-dialog')),'upload'),button('サンプルで試す','button',loadSample));const tip=el('div','welcome-tip');tip.append(icon('shield'),document.createTextNode('ファイルは送信されず、このブラウザー内で表示されます'));card.append(illustration,el('p','eyebrow','YOUR NEXT CHAPTER STARTS HERE'),title,el('p','','配布された日程のJSONファイルを読み込むと、研究室の見学日程をまとめて確認できます。'),actions,tip);wrapper.append(card);return wrapper;}
-function weekCalendar(days,events,conflicts){const scroll=el('div','calendar-scroll');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','週間カレンダー。狭い画面では横にスクロールできます');const table=el('div','week-table');const concurrent=Math.max(1,...layoutDayEvents(events).map(e=>e.columnCount));table.style.minWidth=String(Math.max(800,52+7*Math.min(1000,concurrent*72)))+'px';const header=el('div','week-header');header.append(el('div','timezone','JST'));days.forEach((date,i)=>{const heading=el('div','day-heading'+(date===today?' today':'')+(i>4?' weekend':''));heading.append(el('span','',weekdays[i]),el('strong','',String(Number(date.slice(8)))));header.append(heading);});const min=Math.min(9*60,Math.floor(Math.min(...events.map(e=>e.startMinutes))/60)*60);const max=Math.max(18*60,Math.ceil(Math.max(...events.map(e=>e.endMinutes))/60)*60);const height=(max-min)/60*84;const grid=el('div','time-grid');grid.style.height=`${height}px`;const axis=el('div','time-axis');for(let t=min;t<max;t+=60){const label=el('span','time-label',`${String(t/60).padStart(2,'0')}:00`);label.style.top=`${(t-min)/60*84}px`;axis.append(label);}grid.append(axis);days.forEach((date,index)=>{const column=el('div','day-column'+(index>4?' weekend':''));for(const e of layoutDayEvents(events.filter(e=>e.date===date))){const card=button('','calendar-event',()=>openEvent(e.id));setColor(card,e.category);card.style.top=`${(e.startMinutes-min)/60*84+3}px`;card.style.height=`${Math.max(18,(e.endMinutes-e.startMinutes)/60*84-5)}px`;card.style.left=`calc(${e.column/e.columnCount*100}% + 4px)`;card.style.width=`calc(${100/e.columnCount}% - 8px)`;card.setAttribute('aria-label',`${dateText(e.date)} ${e.start}〜${e.end} ${e.labName} ${e.location}${state.planned.has(e.id)?' 見学候補':''}`);card.title=`${e.start}–${e.end} ${e.labName}\n${e.location}`;if(state.planned.has(e.id))card.classList.add('is-planned');if(conflicts.has(e.id))card.classList.add('has-conflict');if(e.endMinutes-e.startMinutes<45)card.classList.add('short');if(e.endMinutes-e.startMinutes<20)card.classList.add('tiny');card.append(el('span','event-time',`${e.start} – ${e.end}`),el('span','event-name',e.labName),el('span','event-location',e.location||'場所未定'));if(state.planned.has(e.id)){const check=el('span','event-check');check.append(icon('check'));card.append(check);}column.append(card);}grid.append(column);});table.append(header,grid);scroll.append(table);return scroll;}
-function agenda(events){const container=el('div','agenda');const groups=Map.groupBy?Map.groupBy(events,e=>e.date):events.reduce((map,e)=>{if(!map.has(e.date))map.set(e.date,[]);map.get(e.date).push(e);return map;},new Map());for(const [date,items] of [...groups].sort(([a],[b])=>a.localeCompare(b))){const section=el('section','agenda-day');const heading=el('h3','agenda-date',dateText(date));heading.append(el('span','',`${items.length}件`));section.append(heading);for(const e of [...items].sort((a,b)=>a.startMinutes-b.startMinutes||a.endMinutes-b.endMinutes||a.id.localeCompare(b.id))){const row=button('','agenda-item',()=>openEvent(e.id));setColor(row,e.category);if(state.planned.has(e.id))row.classList.add('is-planned');const info=el('div');info.append(el('div','agenda-name',e.labName+(state.planned.has(e.id)?' ✓':'')),el('p','agenda-meta',`${e.category} · ${e.location||'場所未定'}${e.reservationRequired?' · 要予約':''}`));const arrow=el('span','agenda-arrow');arrow.append(icon('right'));row.append(el('span','agenda-time',`${e.start} – ${e.end}`),info,arrow);section.append(row);}container.append(section);}return container;}
+function weekCalendar(days, events, conflicts) {
+  const scroll = el('div', 'calendar-scroll');
+  scroll.tabIndex = 0;
+  scroll.setAttribute('role', 'region');
+  scroll.setAttribute('aria-label', '週間カレンダー。狭い画面では横にスクロールできます');
+  const table = el('div', 'week-table');
+  const concurrent = Math.max(1, ...layoutDayEvents(events).map(e => e.columnCount));
+  table.style.minWidth = String(Math.max(800, 52 + 7 * Math.min(1000, concurrent * 72))) + 'px';
+  const header = el('div', 'week-header');
+  header.append(el('div', 'timezone', 'JST'));
+  days.forEach((date, index) => {
+    const heading = el('div', 'day-heading' + (date === today ? ' today' : '') + (index > 4 ? ' weekend' : ''));
+    heading.append(el('span', '', weekdays[index]), el('strong', '', String(Number(date.slice(8)))));
+    header.append(heading);
+  });
+  const min = Math.min(9 * 60, Math.floor(Math.min(...events.map(e => e.startMinutes)) / 60) * 60);
+  const max = Math.max(18 * 60, Math.ceil(Math.max(...events.map(e => e.endMinutes)) / 60) * 60);
+  const grid = el('div', 'time-grid');
+  grid.style.height = `${(max - min) / 60 * 84}px`;
+  const axis = el('div', 'time-axis');
+  for (let time = min; time < max; time += 60) {
+    const label = el('span', 'time-label', `${time >= 1440 ? '翌' : ''}${String(Math.floor(time / 60) % 24).padStart(2, '0')}:00`);
+    label.style.top = `${(time - min) / 60 * 84}px`;
+    axis.append(label);
+  }
+  grid.append(axis);
+  days.forEach((date, index) => {
+    const column = el('div', 'day-column' + (index > 4 ? ' weekend' : ''));
+    for (const event of layoutDayEvents(events.filter(e => e.date === date))) {
+      const card = button('', 'calendar-event' + (event.endUnknown ? ' end-unknown' : ''), () => openEvent(event.id));
+      setColor(card, event.category);
+      card.style.top = `${(event.startMinutes - min) / 60 * 84 + 3}px`;
+      card.style.height = `${Math.max(18, (event.endMinutes - event.startMinutes) / 60 * 84 - 5)}px`;
+      card.style.left = `calc(${event.column / event.columnCount * 100}% + 4px)`;
+      card.style.width = `calc(${100 / event.columnCount}% - 8px)`;
+      card.setAttribute('aria-label', `${dateText(event.date)} ${eventTimeText(event)} ${event.labName} ${event.location}${state.planned.has(event.id) ? ' 見学候補' : ''}`);
+      card.title = `${eventTimeText(event)} ${event.labName}\n${event.location}${event.endUnknown ? '\n1時間の仮枠で表示しています' : ''}`;
+      if (state.planned.has(event.id)) card.classList.add('is-planned');
+      if (conflicts.has(event.id)) card.classList.add('has-conflict');
+      if (event.endMinutes - event.startMinutes < 45) card.classList.add('short');
+      if (event.endMinutes - event.startMinutes < 20) card.classList.add('tiny');
+      card.append(el('span', 'event-time', event.endUnknown ? `${event.start}〜` : eventTimeText(event)), el('span', 'event-name', event.labName));
+      if (event.endUnknown) card.append(el('span', 'end-unknown-badge', '終了未定'));
+      else card.append(el('span', 'event-location', event.location || '場所未定'));
+      if (state.planned.has(event.id)) {
+        const check = el('span', 'event-check');
+        check.append(icon('check'));
+        card.append(check);
+      }
+      column.append(card);
+    }
+    grid.append(column);
+  });
+  table.append(header, grid);
+  scroll.append(table);
+  return scroll;
+}
+function agenda(events) {
+  const container = el('div', 'agenda');
+  const groups = events.reduce((map, event) => {
+    if (!map.has(event.date)) map.set(event.date, []);
+    map.get(event.date).push(event);
+    return map;
+  }, new Map());
+  for (const [date, items] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+    const section = el('section', 'agenda-day');
+    const heading = el('h3', 'agenda-date', dateText(date));
+    heading.append(el('span', '', `${items.length}件`));
+    section.append(heading);
+    for (const event of [...items].sort((a, b) => a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes || a.id.localeCompare(b.id))) {
+      const row = button('', 'agenda-item' + (event.endUnknown ? ' end-unknown' : ''), () => openEvent(event.id));
+      setColor(row, event.category);
+      if (state.planned.has(event.id)) row.classList.add('is-planned');
+      const info = el('div');
+      info.append(el('div', 'agenda-name', event.labName + (state.planned.has(event.id) ? ' ✓' : '')), el('p', 'agenda-meta', `${event.category} · ${event.location || '場所未定'}${event.reservationRequired ? ' · 要予約' : ''}`));
+      const time = el('span', 'agenda-time', event.endUnknown ? `${event.start}〜` : eventTimeText(event));
+      if (event.endUnknown) time.append(el('span', 'end-unknown-badge', '終了未定'));
+      const arrow = el('span', 'agenda-arrow');
+      arrow.append(icon('right'));
+      row.append(time, info, arrow);
+      section.append(row);
+    }
+    container.append(section);
+  }
+  return container;
+}
 function detailRow(iconName,main,sub){const row=el('div','event-detail-row');const text=el('div','',main);if(sub)text.append(el('small','',sub));row.append(icon(iconName),text);return row;}
-function openEvent(id){const event=state.data?.events.find(e=>e.id===id);if(!event)return;const dialog=$('#event-dialog');dialog.replaceChildren();setColor(dialog,event.category);const top=el('div','modal-heading');top.append(icon('calendar'));const close=button('','icon-button',()=>dialog.close(),'close');close.setAttribute('aria-label','閉じる');top.append(close);const title=el('h2','',event.labName);title.id='event-title';const details=el('div','event-details');details.append(detailRow('calendar',dateText(event.date),`${event.date.slice(0,4)}年 · 日本標準時（JST）`),detailRow('clock',`${event.start} – ${event.end}`,`${event.endMinutes-event.startMinutes}分間`),detailRow('pin',event.location||'場所未定',event.reservationRequired?'事前予約が必要です。研究室の案内をご確認ください。':'参加方法は研究室の案内をご確認ください。'));dialog.append(top,el('span','event-category',event.category),title);if(event.description)dialog.append(el('p','event-description',event.description));dialog.append(details);if(event.note)dialog.append(el('p','event-note',event.note));if(event.url){const link=el('a','event-link','研究室の案内を見る');link.href=event.url;link.target='_blank';link.rel='noopener noreferrer';link.append(icon('external'));dialog.append(link);}const other=state.data.events.filter(e=>state.planned.has(e.id)&&e.id!==event.id);const overlaps=findConflicts([...other,event]).filter(pair=>pair.includes(event.id));if(overlaps.length){const names=overlaps.map(pair=>state.data.events.find(e=>e.id===pair.find(id=>id!==event.id))?.labName).filter(Boolean);dialog.append(el('p','event-warning',`${names.join('、')} の見学候補と時間が重なっています。`));}const planned=state.planned.has(id);const planButton=button(planned?'見学候補から外す':'見学候補に追加','button primary event-plan-button',()=>{togglePlan(id);openEvent(id);},planned?'check':'plus');planButton.setAttribute('aria-pressed',String(planned));dialog.append(planButton,el('p','modal-footnote','見学候補への追加は予約ではありません。候補のIDだけをこのブラウザーに保存します。'));openDialog(dialog);}
+function openEvent(id){const event=state.data?.events.find(e=>e.id===id);if(!event)return;const dialog=$('#event-dialog');dialog.replaceChildren();setColor(dialog,event.category);const top=el('div','modal-heading');top.append(icon('calendar'));const close=button('','icon-button',()=>dialog.close(),'close');close.setAttribute('aria-label','閉じる');top.append(close);const title=el('h2','',event.labName);title.id='event-title';const details=el('div','event-details');details.append(detailRow('calendar',dateText(event.date),`${event.date.slice(0,4)}年 · 日本標準時（JST）`),detailRow('clock',eventTimeText(event),event.endUnknown?'カレンダー上は1時間の仮枠で表示しています。':`${event.endMinutes-event.startMinutes}分間`),detailRow('pin',event.location||'場所未定',event.reservationRequired?'事前予約が必要です。研究室の案内をご確認ください。':'参加方法は研究室の案内をご確認ください。'));dialog.append(top,el('span','event-category',event.category),title);if(event.description)dialog.append(el('p','event-description',event.description));dialog.append(details);if(event.note)dialog.append(el('p','event-note',event.note));if(event.url){const link=el('a','event-link','研究室の案内を見る');link.href=event.url;link.target='_blank';link.rel='noopener noreferrer';link.append(icon('external'));dialog.append(link);}const other=state.data.events.filter(e=>state.planned.has(e.id)&&e.id!==event.id);const overlaps=findConflicts([...other,event]).filter(pair=>pair.includes(event.id));if(overlaps.length){const names=overlaps.map(pair=>state.data.events.find(e=>e.id===pair.find(id=>id!==event.id))?.labName).filter(Boolean);dialog.append(el('p','event-warning',`${names.join('、')} の見学候補と時間が重なっています。${event.endUnknown||other.some(e=>e.endUnknown&&overlaps.some(pair=>pair.includes(e.id)))?' 終了未定の予定は1時間の仮枠で比較しています。':''}`));}const planned=state.planned.has(id);const planButton=button(planned?'見学候補から外す':'見学候補に追加','button primary event-plan-button',()=>{togglePlan(id);openEvent(id);},planned?'check':'plus');planButton.setAttribute('aria-pressed',String(planned));dialog.append(planButton,el('p','modal-footnote','見学候補への追加は予約ではありません。候補のIDだけをこのブラウザーに保存します。'));openDialog(dialog);}
 function togglePlan(id){state.planned.has(id)?state.planned.delete(id):state.planned.add(id);try{if(state.planned.size)localStorage.setItem(state.storageKey,JSON.stringify([...state.planned]));else localStorage.removeItem(state.storageKey);}catch{toast('候補はこの画面で保持します。ブラウザーの保存機能が使えません。');}render();}
 function resetFilters(){state.query='';state.planOnly=false;state.categories=new Set(state.colors.keys());$('#search').value='';renderFilters();render();}
 $('#reset-filters').addEventListener('click',resetFilters);
