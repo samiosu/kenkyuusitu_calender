@@ -1,4 +1,4 @@
-import { normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan, layoutDayEvents, findConflicts, createCalendar, filterScheduleEvents } from './src/schedule.mjs';
+import { normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan, layoutDayEvents, findConflicts, createCalendar, filterScheduleEvents, setCategoryVisibility, getCategoryVisibility } from './src/schedule.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const icons = {
@@ -54,8 +54,46 @@ dropZone.addEventListener('drop',event=>{if(event.dataTransfer.files.length!==1)
 async function loadSample(){const version=++state.loadVersion;$('#load-sample').disabled=true;$('#import-error').hidden=true;try{const response=await fetch('./examples/schedule.sample.json',{credentials:'omit'});if(!response.ok)throw new Error('サンプルを取得できませんでした。時間をおいてお試しください。');const input=await response.json();if(version===state.loadVersion)applyData(input,true,'サンプルデータ');}catch(error){if(version===state.loadVersion)importError(error);}finally{$('#load-sample').disabled=false;}}
 $('#load-sample').addEventListener('click',loadSample);
 function storageKey(data,sample){const text=JSON.stringify(data.events.map(({id,date,start,end})=>[id,date,start,end]).sort((a,b)=>a[0].localeCompare(b[0])));let hash=2166136261;for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return `labvisit.plan.v1.${sample?'sample':'file'}.${(hash>>>0).toString(16)}`;}
-function applyData(input,sample,source){const data=normalizeSchedule(input);const key=storageKey(data,sample);let saved=[];try{const parsed=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(parsed))saved=parsed.filter(id=>typeof id==='string');}catch{/* Storage can be disabled by the visitor. */}const ids=new Set(data.events.map(e=>e.id));const dates=data.events.map(e=>e.date).sort();state.data=data;state.sample=sample;state.source=source;state.storageKey=key;state.hiddenLabs=readHiddenLabs(data,key);state.planned=new Set(saved.filter(id=>ids.has(id)));state.query='';state.planOnly=false;state.categories=new Set(data.labs.map(l=>l.category));state.colors=new Map([...state.categories].map((c,i)=>[c,palette[i%palette.length]]));state.anchor=dates.find(d=>d>=today)||dates[0]||today;state.miniMonth=state.anchor.slice(0,7)+'-01';$('#search').value='';$('#import-error').hidden=true;$('#import-dialog').close();renderFilters();renderLabFilters();render();toast(`${data.labs.length}研究室・${data.events.length}件の予定を読み込みました`);}
-function renderFilters(){const container=$('#category-filters');container.replaceChildren();if(!state.data){container.append(el('p','muted small','JSONを読み込むと表示されます'));return;}for(const category of state.colors.keys()){const label=el('label','category-label');setColor(label,category);const input=el('input');input.type='checkbox';input.checked=state.categories.has(category);input.addEventListener('change',()=>{input.checked?state.categories.add(category):state.categories.delete(category);render();});label.append(input,el('span','',category),el('span','category-count',String(state.data.labs.filter(l=>l.category===category).length)));container.append(label);}}
+function applyData(input,sample,source){const data=normalizeSchedule(input);const key=storageKey(data,sample);let saved=[];try{const parsed=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(parsed))saved=parsed.filter(id=>typeof id==='string');}catch{/* Storage can be disabled by the visitor. */}const ids=new Set(data.events.map(e=>e.id));const dates=data.events.map(e=>e.date).sort();state.data=data;state.sample=sample;state.source=source;state.storageKey=key;state.hiddenLabs=readHiddenLabs(data,key);state.planned=new Set(saved.filter(id=>ids.has(id)));state.query='';state.planOnly=false;state.categories=new Set(data.labs.map(l=>l.category));state.colors=new Map([...state.categories].map((c,i)=>[c,palette[i%palette.length]]));state.anchor=dates.find(d=>d>=today)||dates[0]||today;state.miniMonth=state.anchor.slice(0,7)+'-01';$('#search').value='';$('#import-error').hidden=true;$('#import-dialog').close();renderFilters();renderLabFilters();syncVisibilityFilters();render();toast(`${data.labs.length}研究室・${data.events.length}件の予定を読み込みました`);}
+function renderFilters() {
+  const container = $('#category-filters');
+  container.replaceChildren();
+  if (!state.data) {
+    container.append(el('p', 'muted small', 'JSONを読み込むと表示されます'));
+    return;
+  }
+  for (const category of state.colors.keys()) {
+    const label = el('label', 'category-label');
+    setColor(label, category);
+    const input = el('input');
+    input.type = 'checkbox';
+    input.value = category;
+    input.addEventListener('change', () => {
+      state.hiddenLabs = setCategoryVisibility(state.data.labs, state.hiddenLabs, category, input.checked);
+      syncVisibilityFilters();
+      saveHiddenLabs();
+      render();
+    });
+    label.append(input, el('span', '', category), el('span', 'category-count'));
+    container.append(label);
+  }
+}
+function syncVisibilityFilters() {
+  const groups = getCategoryVisibility(state.data?.labs || [], state.hiddenLabs);
+  state.categories = new Set(groups.filter(group => group.visible > 0).map(group => group.category));
+  const byCategory = new Map(groups.map(group => [group.category, group]));
+  for (const input of document.querySelectorAll('#category-filters input')) {
+    const group = byCategory.get(input.value);
+    if (!group) continue;
+    input.checked = group.checked;
+    input.indeterminate = group.indeterminate;
+    input.parentElement.querySelector('.category-count').textContent = `${group.visible}/${group.total}`;
+  }
+  for (const input of document.querySelectorAll('#lab-filters input')) {
+    input.checked = !state.hiddenLabs.has(input.value);
+  }
+  updateLabVisibilityCount();
+}
 function readHiddenLabs(data, key) {
   const knownIds = new Set(data.labs.map(lab => lab.id));
   try {
@@ -97,7 +135,7 @@ function renderLabFilters() {
       if (input.checked) state.hiddenLabs.delete(lab.id);
       else state.hiddenLabs.add(lab.id);
       saveHiddenLabs();
-      updateLabVisibilityCount();
+      syncVisibilityFilters();
       render();
     });
     const text = el('span');
@@ -110,8 +148,8 @@ function renderLabFilters() {
 function setAllLabsVisible(visible) {
   if (!state.data) return;
   state.hiddenLabs = visible ? new Set() : new Set(state.data.labs.map(lab => lab.id));
+  syncVisibilityFilters();
   saveHiddenLabs();
-  renderLabFilters();
   render();
 }
 function filteredEvents() {
@@ -223,6 +261,7 @@ function resetFilters() {
   $('#search').value = '';
   renderFilters();
   renderLabFilters();
+  syncVisibilityFilters();
   render();
 }
 $('#show-all-labs').addEventListener('click',()=>setAllLabsVisible(true));

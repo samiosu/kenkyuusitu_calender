@@ -139,6 +139,33 @@ export function normalizeSchedule(input) {
   return { version: 1, title, updatedAt, labs, events };
 }
 
+/** A category checkbox selects or clears all its labs; other categories keep their state. */
+export function setCategoryVisibility(labs, hiddenLabs, category, visible) {
+  const result = new Set(hiddenLabs);
+  for (const lab of labs) {
+    if (lab.category !== category) continue;
+    if (visible) result.delete(lab.id);
+    else result.add(lab.id);
+  }
+  return result;
+}
+
+/** Derive parent checkbox states from the individual lab selections. */
+export function getCategoryVisibility(labs, hiddenLabs = new Set()) {
+  const groups = new Map();
+  for (const lab of labs) {
+    if (!groups.has(lab.category)) groups.set(lab.category, { category: lab.category, total: 0, visible: 0 });
+    const group = groups.get(lab.category);
+    group.total += 1;
+    if (!hiddenLabs.has(lab.id)) group.visible += 1;
+  }
+  return [...groups.values()].map(group => ({
+    ...group,
+    checked: group.visible === group.total,
+    indeterminate: group.visible > 0 && group.visible < group.total,
+  }));
+}
+
 /** View filters do not modify the source data or saved visit candidates. */
 export function filterScheduleEvents(events, {
   categories, hiddenLabs = new Set(), query = '', planned = new Set(), planOnly = false,

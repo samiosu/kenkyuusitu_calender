@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan,
   layoutDayEvents, findConflicts, createCalendar, SCHEDULE_LIMITS, filterScheduleEvents,
+  setCategoryVisibility, getCategoryVisibility,
 } from '../src/schedule.mjs';
 
 const session = (changes = {}) => ({ id: 'visit-1', date: '2026-10-15', start: '10:00', end: '11:00', ...changes });
@@ -274,6 +275,51 @@ test('all labs can be hidden and restored without changing the source or saved c
   assert.deepEqual(filterScheduleEvents(events, { categories: new Set() }), []);
   assert.deepEqual(events, before);
   assert.deepEqual([...planned], ['sample-a:visit-1']);
+});
+
+test('turning off a category hides all its labs without changing other selections', () => {
+  const labs = [{ id: 'a', category: '情報' }, { id: 'b', category: '情報' }, { id: 'c', category: '数理' }];
+  const originalLabs = structuredClone(labs);
+  const hidden = new Set(['c']);
+  const result = setCategoryVisibility(labs, hidden, '情報', false);
+  assert.deepEqual([...result].sort(), ['a', 'b', 'c']);
+  assert.deepEqual([...hidden], ['c']);
+  assert.deepEqual(labs, originalLabs);
+  assert.deepEqual(getCategoryVisibility(labs, result).map(({ checked, indeterminate }) => [checked, indeterminate]), [[false, false], [false, false]]);
+});
+
+test('turning on a category restores all its labs including individually hidden ones', () => {
+  const labs = [{ id: 'a', category: '情報' }, { id: 'b', category: '情報' }, { id: 'c', category: '数理' }];
+  const hidden = new Set(['a', 'b', 'c']);
+  const result = setCategoryVisibility(labs, hidden, '情報', true);
+  assert.deepEqual([...result], ['c']);
+  assert.deepEqual([...hidden], ['a', 'b', 'c']);
+  assert.deepEqual(getCategoryVisibility(labs, result), [
+    { category: '情報', total: 2, visible: 2, checked: true, indeterminate: false },
+    { category: '数理', total: 1, visible: 0, checked: false, indeterminate: false },
+  ]);
+});
+
+test('individual lab selections give their category checked, mixed or unchecked states', () => {
+  const labs = [{ id: 'a', category: '情報' }, { id: 'b', category: '情報' }];
+  assert.deepEqual(getCategoryVisibility(labs, new Set(['b'])), [
+    { category: '情報', total: 2, visible: 1, checked: false, indeterminate: true },
+  ]);
+  assert.equal(getCategoryVisibility(labs, new Set())[0].checked, true);
+  assert.equal(getCategoryVisibility(labs, new Set(['a', 'b']))[0].visible, 0);
+  assert.deepEqual(getCategoryVisibility([], new Set()), []);
+});
+
+test('a lab re-enabled under a disabled category becomes visible immediately', () => {
+  const input = document();
+  input.labs.push({ id: 'sample-b', name: 'サンプルB研究室', category: '情報', sessions: [session()] });
+  const { labs, events } = normalizeSchedule(input);
+  const hidden = setCategoryVisibility(labs, new Set(), '情報', false);
+  const categories = () => new Set(getCategoryVisibility(labs, hidden).filter(group => group.visible > 0).map(group => group.category));
+  assert.deepEqual(filterScheduleEvents(events, { hiddenLabs: hidden, categories: categories() }), []);
+  hidden.delete('sample-a');
+  assert.deepEqual(filterScheduleEvents(events, { hiddenLabs: hidden, categories: categories() }).map(({ id }) => id), ['sample-a:visit-1']);
+  assert.equal(getCategoryVisibility(labs, hidden)[0].indeterminate, true);
 });
 
 test('sample data is valid, fictional and contains two weeks of sessions', async () => {
