@@ -26,6 +26,15 @@
         <div class="sidebar-divider"></div>
         <label class="search-field"><span data-icon="search"></span><input id="search" type="search" placeholder="研究室・場所を検索" aria-label="研究室名、分野、場所、メモで検索" autocomplete="off"></label>
         <div class="filter-heading"><h2>研究分野</h2><button class="text-button" id="reset-filters">リセット</button></div><div id="category-filters" class="category-filters"><p class="muted small">JSONを読み込むと表示されます</p></div>
+        <details class="lab-visibility" id="lab-visibility" hidden>
+          <summary><span>表示する研究室</span><span class="lab-visible-count" id="lab-visible-count"></span><span data-icon="right"></span></summary>
+          <div class="lab-visibility-body">
+            <p>チェックを外すと、その研究室の予定を非表示にします。</p>
+            <div class="lab-visibility-actions"><button class="text-button" id="show-all-labs">すべて表示</button><button class="text-button" id="hide-all-labs">すべて非表示</button></div>
+            <div class="lab-filters" id="lab-filters" role="group" aria-label="研究室ごとの表示設定"></div>
+            <p class="lab-visibility-note">設定はこのブラウザーに保存します。保存済みの見学候補は削除されません。</p>
+          </div>
+        </details>
         <div class="sidebar-divider"></div>
         <button class="plan-filter" id="plan-filter" aria-pressed="false"><span data-icon="bookmark"></span><span>マイプラン</span><span class="count" id="plan-count">0</span></button><p class="sidebar-hint">予定を開いて、見学候補に追加。<br>時間の重なりも確認できます。</p>
         <div class="data-card"><span class="status-dot"></span><strong id="data-label">データ未読み込み</strong><p id="data-description">配布されたJSONファイルを<br>読み込んではじめましょう。</p><button class="text-button" id="data-manage">データについて<span data-icon="right"></span></button></div>

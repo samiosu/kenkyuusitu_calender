@@ -139,6 +139,20 @@ export function normalizeSchedule(input) {
   return { version: 1, title, updatedAt, labs, events };
 }
 
+/** View filters do not modify the source data or saved visit candidates. */
+export function filterScheduleEvents(events, {
+  categories, hiddenLabs = new Set(), query = '', planned = new Set(), planOnly = false,
+} = {}) {
+  const keyword = query.trim().toLocaleLowerCase('ja-JP');
+  return events.filter((event) =>
+    (!categories || categories.has(event.category)) &&
+    !hiddenLabs.has(event.labId) &&
+    (!planOnly || planned.has(event.id)) &&
+    (!keyword || [event.labName, event.category, event.location, event.note, event.description]
+      .some((value) => value.toLocaleLowerCase('ja-JP').includes(keyword)))
+  );
+}
+
 export function shiftDate(dateString, days) {
   dateValue(dateString);
   if (!Number.isInteger(days) || !Number.isSafeInteger(days)) fail('日数', '整数を指定してください。');

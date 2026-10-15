@@ -1,4 +1,4 @@
-import { normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan, layoutDayEvents, findConflicts, createCalendar } from './src/schedule.mjs';
+import { normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan, layoutDayEvents, findConflicts, createCalendar, filterScheduleEvents } from './src/schedule.mjs';
 
 const $ = (selector) => document.querySelector(selector);
 const icons = {
@@ -26,7 +26,7 @@ const palette=[['#8c88d8','#f0effb','#6863a4'],['#66a69b','#edf6f2','#478479'],[
 const today=getTodayInJapan();
 const MIN_DATE='1900-01-01', MAX_DATE='2100-12-31';
 const clampDate=date=>date<MIN_DATE?MIN_DATE:date>MAX_DATE?MAX_DATE:date;
-const state={data:null,sample:false,source:'',anchor:today,miniMonth:today.slice(0,7)+'-01',view:matchMedia('(max-width:760px)').matches?'list':'week',query:'',categories:new Set(),planned:new Set(),planOnly:false,storageKey:'',colors:new Map(),loadVersion:0};
+const state={data:null,sample:false,source:'',anchor:today,miniMonth:today.slice(0,7)+'-01',view:matchMedia('(max-width:760px)').matches?'list':'week',query:'',categories:new Set(),hiddenLabs:new Set(),planned:new Set(),planOnly:false,storageKey:'',colors:new Map(),loadVersion:0};
 const weekdays=['月','火','水','木','金','土','日'];
 const dateObject=(date)=>new Date(date+'T12:00:00Z');
 const dateText=(date)=>new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',month:'long',day:'numeric',weekday:'short'}).format(dateObject(date));
@@ -54,12 +54,76 @@ dropZone.addEventListener('drop',event=>{if(event.dataTransfer.files.length!==1)
 async function loadSample(){const version=++state.loadVersion;$('#load-sample').disabled=true;$('#import-error').hidden=true;try{const response=await fetch('./examples/schedule.sample.json',{credentials:'omit'});if(!response.ok)throw new Error('サンプルを取得できませんでした。時間をおいてお試しください。');const input=await response.json();if(version===state.loadVersion)applyData(input,true,'サンプルデータ');}catch(error){if(version===state.loadVersion)importError(error);}finally{$('#load-sample').disabled=false;}}
 $('#load-sample').addEventListener('click',loadSample);
 function storageKey(data,sample){const text=JSON.stringify(data.events.map(({id,date,start,end})=>[id,date,start,end]).sort((a,b)=>a[0].localeCompare(b[0])));let hash=2166136261;for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return `labvisit.plan.v1.${sample?'sample':'file'}.${(hash>>>0).toString(16)}`;}
-function applyData(input,sample,source){const data=normalizeSchedule(input);const key=storageKey(data,sample);let saved=[];try{const parsed=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(parsed))saved=parsed.filter(id=>typeof id==='string');}catch{/* Storage can be disabled by the visitor. */}const ids=new Set(data.events.map(e=>e.id));const dates=data.events.map(e=>e.date).sort();state.data=data;state.sample=sample;state.source=source;state.storageKey=key;state.planned=new Set(saved.filter(id=>ids.has(id)));state.query='';state.planOnly=false;state.categories=new Set(data.labs.map(l=>l.category));state.colors=new Map([...state.categories].map((c,i)=>[c,palette[i%palette.length]]));state.anchor=dates.find(d=>d>=today)||dates[0]||today;state.miniMonth=state.anchor.slice(0,7)+'-01';$('#search').value='';$('#import-error').hidden=true;$('#import-dialog').close();renderFilters();render();toast(`${data.labs.length}研究室・${data.events.length}件の予定を読み込みました`);}
+function applyData(input,sample,source){const data=normalizeSchedule(input);const key=storageKey(data,sample);let saved=[];try{const parsed=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(parsed))saved=parsed.filter(id=>typeof id==='string');}catch{/* Storage can be disabled by the visitor. */}const ids=new Set(data.events.map(e=>e.id));const dates=data.events.map(e=>e.date).sort();state.data=data;state.sample=sample;state.source=source;state.storageKey=key;state.hiddenLabs=readHiddenLabs(data,key);state.planned=new Set(saved.filter(id=>ids.has(id)));state.query='';state.planOnly=false;state.categories=new Set(data.labs.map(l=>l.category));state.colors=new Map([...state.categories].map((c,i)=>[c,palette[i%palette.length]]));state.anchor=dates.find(d=>d>=today)||dates[0]||today;state.miniMonth=state.anchor.slice(0,7)+'-01';$('#search').value='';$('#import-error').hidden=true;$('#import-dialog').close();renderFilters();renderLabFilters();render();toast(`${data.labs.length}研究室・${data.events.length}件の予定を読み込みました`);}
 function renderFilters(){const container=$('#category-filters');container.replaceChildren();if(!state.data){container.append(el('p','muted small','JSONを読み込むと表示されます'));return;}for(const category of state.colors.keys()){const label=el('label','category-label');setColor(label,category);const input=el('input');input.type='checkbox';input.checked=state.categories.has(category);input.addEventListener('change',()=>{input.checked?state.categories.add(category):state.categories.delete(category);render();});label.append(input,el('span','',category),el('span','category-count',String(state.data.labs.filter(l=>l.category===category).length)));container.append(label);}}
-function filteredEvents(){if(!state.data)return[];const query=state.query.toLocaleLowerCase('ja-JP');return state.data.events.filter(e=>state.categories.has(e.category)&&(!state.planOnly||state.planned.has(e.id))&&(!query||[e.labName,e.category,e.location,e.note,e.description].some(v=>v.toLocaleLowerCase('ja-JP').includes(query))));}
+function readHiddenLabs(data, key) {
+  const knownIds = new Set(data.labs.map(lab => lab.id));
+  try {
+    const stored = JSON.parse(localStorage.getItem(`${key}.hidden-labs`) || '[]');
+    return new Set(Array.isArray(stored) ? stored.filter(id => typeof id === 'string' && knownIds.has(id)) : []);
+  } catch {
+    return new Set();
+  }
+}
+function saveHiddenLabs() {
+  if (!state.storageKey) return;
+  try {
+    const key = `${state.storageKey}.hidden-labs`;
+    if (state.hiddenLabs.size) localStorage.setItem(key, JSON.stringify([...state.hiddenLabs]));
+    else localStorage.removeItem(key);
+  } catch {
+    toast('表示設定はこの画面で保持します。ブラウザーの保存機能が使えません。');
+  }
+}
+function updateLabVisibilityCount() {
+  const total = state.data?.labs.length || 0;
+  $('#lab-visible-count').textContent = `${total - state.hiddenLabs.size} / ${total}`;
+}
+function renderLabFilters() {
+  const section = $('#lab-visibility');
+  const container = $('#lab-filters');
+  container.replaceChildren();
+  section.hidden = !state.data?.labs.length;
+  if (section.hidden) return;
+  for (const lab of state.data.labs) {
+    const label = el('label', 'lab-choice');
+    setColor(label, lab.category);
+    const input = el('input');
+    input.type = 'checkbox';
+    input.value = lab.id;
+    input.checked = !state.hiddenLabs.has(lab.id);
+    input.setAttribute('aria-label', `${lab.name}を表示`);
+    input.addEventListener('change', () => {
+      if (input.checked) state.hiddenLabs.delete(lab.id);
+      else state.hiddenLabs.add(lab.id);
+      saveHiddenLabs();
+      updateLabVisibilityCount();
+      render();
+    });
+    const text = el('span');
+    text.append(el('span', 'lab-choice-name', lab.name), el('span', 'lab-choice-category', lab.category));
+    label.append(input, text);
+    container.append(label);
+  }
+  updateLabVisibilityCount();
+}
+function setAllLabsVisible(visible) {
+  if (!state.data) return;
+  state.hiddenLabs = visible ? new Set() : new Set(state.data.labs.map(lab => lab.id));
+  saveHiddenLabs();
+  renderLabFilters();
+  render();
+}
+function filteredEvents() {
+  if (!state.data) return [];
+  return filterScheduleEvents(state.data.events, {
+    categories: state.categories, hiddenLabs: state.hiddenLabs, query: state.query,
+    planned: state.planned, planOnly: state.planOnly,
+  });
+}
 function selectedEvents(){return state.data?state.data.events.filter(e=>state.planned.has(e.id)):[];}
-function renderMini(){const first=state.miniMonth;const year=Number(first.slice(0,4)),month=Number(first.slice(5,7));$('#mini-month').textContent=`${year}年 ${month}月`;const grid=$('#mini-days');grid.replaceChildren();const start=getWeekDays(first)[0];const week=getWeekDays(state.anchor);const eventDates=new Set(state.data?.events.map(e=>e.date)||[]);for(let i=0;i<42;i++){const date=shiftDate(start,i);const day=button(String(Number(date.slice(8))),'',()=>{state.anchor=clampDate(date);if(date.slice(0,7)!==state.miniMonth.slice(0,7))state.miniMonth=date.slice(0,7)+'-01';render();});day.disabled=date<MIN_DATE||date>MAX_DATE;day.setAttribute('aria-label',new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',dateStyle:'full'}).format(dateObject(date)));day.setAttribute('aria-pressed',String(date===state.anchor));if(date===today){day.classList.add('is-today');day.setAttribute('aria-current','date');}if(date.slice(0,7)!==first.slice(0,7))day.classList.add('other-month');if(week.includes(date))day.classList.add('in-week');if(date===state.anchor)day.classList.add('is-selected');if(eventDates.has(date))day.classList.add('has-event');grid.append(day);}}
-function render(){renderMini();const days=getWeekDays(state.anchor);const start=days[0],end=days[6];const [year,month]=start.split('-');const endMonth=Number(end.slice(5,7));$('#period-title').textContent=`${year}年 ${Number(month)}月${endMonth!==Number(month)?` – ${end.slice(0,4)!==year?end.slice(0,4)+'年 ':''}${endMonth}月`:''}`;$('#period-title').title=`${dateText(start)}〜${dateText(end)}`;$('#week-view').setAttribute('aria-pressed',String(state.view==='week'));$('#list-view').setAttribute('aria-pressed',String(state.view==='list'));$('#plan-filter').setAttribute('aria-pressed',String(state.planOnly));$('#plan-count').textContent=state.planned.size;$('#sample-badge').hidden=!state.sample;$('#export-button').disabled=state.planned.size===0;$('#data-label').textContent=state.data?(state.sample?'サンプルを表示中':'データ読み込み済み'):'データ未読み込み';$('#data-label').closest('.data-card').classList.toggle('is-loaded',!!state.data);$('#data-description').textContent=state.data?`${state.data.labs.length}研究室・${state.data.events.length}件の予定${state.data.updatedAt?' / 更新 '+state.data.updatedAt.slice(0,10):''}`:'配布されたJSONファイルを読み込んではじめましょう。';const filtered=filteredEvents();const events=filtered.filter(e=>days.includes(e.date));$('#visible-count').textContent=`${Number(start.slice(5,7))}/${Number(start.slice(8))} – ${Number(end.slice(5,7))}/${Number(end.slice(8))} · ${state.planOnly?'候補':'見学'} ${events.length}件`;const conflicts=findConflicts(selectedEvents());const banner=$('#conflict-banner');banner.hidden=conflicts.length===0;banner.textContent=`マイプランに時間が重なる予定が${conflicts.length}組あります。予定を開いて確認してください。`+(selectedEvents().some(e=>e.endUnknown)?' 終了未定の予定は1時間の仮枠で比較しています。':'');const content=$('#calendar-content');content.replaceChildren();if(!state.data){content.append(welcome());return;}if(!events.length){const empty=el('div','empty-filter');empty.append(icon(state.planOnly?'bookmark':'calendar'),el('h3','',state.planOnly?'今週の見学候補はまだありません':'この週に表示できる予定はありません'),el('p','',state.planOnly?'予定を開いて「見学候補に追加」してみましょう。':'別の週に移動するか、検索条件を変更してください。'));if(filtered.length){empty.append(button('予定のある週へ','button',()=>{state.anchor=(filtered.find(e=>e.date>=state.anchor)||filtered[0]).date;state.miniMonth=state.anchor.slice(0,7)+'-01';render();},'right'));}if(state.query||state.categories.size!==state.colors.size||state.planOnly)empty.append(button('絞り込みをリセット','text-button',resetFilters));content.append(empty);return;}content.append(state.view==='week'?weekCalendar(days,events,new Set(conflicts.flat())):agenda(events));}
+function renderMini(){const first=state.miniMonth;const year=Number(first.slice(0,4)),month=Number(first.slice(5,7));$('#mini-month').textContent=`${year}年 ${month}月`;const grid=$('#mini-days');grid.replaceChildren();const start=getWeekDays(first)[0];const week=getWeekDays(state.anchor);const eventDates=new Set(filteredEvents().map(e=>e.date));for(let i=0;i<42;i++){const date=shiftDate(start,i);const day=button(String(Number(date.slice(8))),'',()=>{state.anchor=clampDate(date);if(date.slice(0,7)!==state.miniMonth.slice(0,7))state.miniMonth=date.slice(0,7)+'-01';render();});day.disabled=date<MIN_DATE||date>MAX_DATE;day.setAttribute('aria-label',new Intl.DateTimeFormat('ja-JP',{timeZone:'UTC',dateStyle:'full'}).format(dateObject(date)));day.setAttribute('aria-pressed',String(date===state.anchor));if(date===today){day.classList.add('is-today');day.setAttribute('aria-current','date');}if(date.slice(0,7)!==first.slice(0,7))day.classList.add('other-month');if(week.includes(date))day.classList.add('in-week');if(date===state.anchor)day.classList.add('is-selected');if(eventDates.has(date))day.classList.add('has-event');grid.append(day);}}
+function render(){renderMini();const days=getWeekDays(state.anchor);const start=days[0],end=days[6];const [year,month]=start.split('-');const endMonth=Number(end.slice(5,7));$('#period-title').textContent=`${year}年 ${Number(month)}月${endMonth!==Number(month)?` – ${end.slice(0,4)!==year?end.slice(0,4)+'年 ':''}${endMonth}月`:''}`;$('#period-title').title=`${dateText(start)}〜${dateText(end)}`;$('#week-view').setAttribute('aria-pressed',String(state.view==='week'));$('#list-view').setAttribute('aria-pressed',String(state.view==='list'));$('#plan-filter').setAttribute('aria-pressed',String(state.planOnly));$('#plan-count').textContent=state.planned.size;$('#sample-badge').hidden=!state.sample;$('#export-button').disabled=state.planned.size===0;$('#data-label').textContent=state.data?(state.sample?'サンプルを表示中':'データ読み込み済み'):'データ未読み込み';$('#data-label').closest('.data-card').classList.toggle('is-loaded',!!state.data);$('#data-description').textContent=state.data?`${state.data.labs.length}研究室・${state.data.events.length}件の予定${state.data.updatedAt?' / 更新 '+state.data.updatedAt.slice(0,10):''}`:'配布されたJSONファイルを読み込んではじめましょう。';const filtered=filteredEvents();const events=filtered.filter(e=>days.includes(e.date));$('#visible-count').textContent=`${Number(start.slice(5,7))}/${Number(start.slice(8))} – ${Number(end.slice(5,7))}/${Number(end.slice(8))} · ${state.planOnly?'候補':'見学'} ${events.length}件`;const conflicts=findConflicts(selectedEvents());const banner=$('#conflict-banner');banner.hidden=conflicts.length===0;banner.textContent=`マイプランに時間が重なる予定が${conflicts.length}組あります。予定を開いて確認してください。`+(selectedEvents().some(e=>e.endUnknown)?' 終了未定の予定は1時間の仮枠で比較しています。':'');const content=$('#calendar-content');content.replaceChildren();if(!state.data){content.append(welcome());return;}if(!events.length){const empty=el('div','empty-filter');empty.append(icon(state.planOnly?'bookmark':'calendar'),el('h3','',state.planOnly?'今週の見学候補はまだありません':'この週に表示できる予定はありません'),el('p','',state.planOnly?'予定を開いて「見学候補に追加」してみましょう。':'別の週に移動するか、検索条件を変更してください。'));if(filtered.length){empty.append(button('予定のある週へ','button',()=>{state.anchor=(filtered.find(e=>e.date>=state.anchor)||filtered[0]).date;state.miniMonth=state.anchor.slice(0,7)+'-01';render();},'right'));}if(state.query||state.categories.size!==state.colors.size||state.planOnly||state.hiddenLabs.size)empty.append(button('絞り込みをリセット','text-button',resetFilters));content.append(empty);return;}content.append(state.view==='week'?weekCalendar(days,events,new Set(conflicts.flat())):agenda(events));}
 function welcome(){const wrapper=el('div','welcome-state');const card=el('div','welcome-card');const illustration=el('div','welcome-illustration');illustration.append(icon('calendar'));const badge=el('span');badge.append(icon('plus'));illustration.append(badge);const title=el('h3');title.append(document.createTextNode('予定を読み込んで、'),el('br'),document.createTextNode('見学の計画をはじめよう。'));const actions=el('div','welcome-actions');actions.append(button('JSONを読み込む','button primary',()=>openDialog($('#import-dialog')),'upload'),button('サンプルで試す','button',loadSample));const tip=el('div','welcome-tip');tip.append(icon('shield'),document.createTextNode('ファイルは送信されず、このブラウザー内で表示されます'));card.append(illustration,el('p','eyebrow','YOUR NEXT CHAPTER STARTS HERE'),title,el('p','','配布された日程のJSONファイルを読み込むと、研究室の見学日程をまとめて確認できます。'),actions,tip);wrapper.append(card);return wrapper;}
 function weekCalendar(days, events, conflicts) {
   const scroll = el('div', 'calendar-scroll');
@@ -150,7 +214,19 @@ function agenda(events) {
 function detailRow(iconName,main,sub){const row=el('div','event-detail-row');const text=el('div','',main);if(sub)text.append(el('small','',sub));row.append(icon(iconName),text);return row;}
 function openEvent(id){const event=state.data?.events.find(e=>e.id===id);if(!event)return;const dialog=$('#event-dialog');dialog.replaceChildren();setColor(dialog,event.category);const top=el('div','modal-heading');top.append(icon('calendar'));const close=button('','icon-button',()=>dialog.close(),'close');close.setAttribute('aria-label','閉じる');top.append(close);const title=el('h2','',event.labName);title.id='event-title';const details=el('div','event-details');details.append(detailRow('calendar',dateText(event.date),`${event.date.slice(0,4)}年 · 日本標準時（JST）`),detailRow('clock',eventTimeText(event),event.endUnknown?'カレンダー上は1時間の仮枠で表示しています。':`${event.endMinutes-event.startMinutes}分間`),detailRow('pin',event.location||'場所未定',event.reservationRequired?'事前予約が必要です。研究室の案内をご確認ください。':'参加方法は研究室の案内をご確認ください。'));dialog.append(top,el('span','event-category',event.category),title);if(event.description)dialog.append(el('p','event-description',event.description));dialog.append(details);if(event.note)dialog.append(el('p','event-note',event.note));if(event.url){const link=el('a','event-link','研究室の案内を見る');link.href=event.url;link.target='_blank';link.rel='noopener noreferrer';link.append(icon('external'));dialog.append(link);}const other=state.data.events.filter(e=>state.planned.has(e.id)&&e.id!==event.id);const overlaps=findConflicts([...other,event]).filter(pair=>pair.includes(event.id));if(overlaps.length){const names=overlaps.map(pair=>state.data.events.find(e=>e.id===pair.find(id=>id!==event.id))?.labName).filter(Boolean);dialog.append(el('p','event-warning',`${names.join('、')} の見学候補と時間が重なっています。${event.endUnknown||other.some(e=>e.endUnknown&&overlaps.some(pair=>pair.includes(e.id)))?' 終了未定の予定は1時間の仮枠で比較しています。':''}`));}const planned=state.planned.has(id);const planButton=button(planned?'見学候補から外す':'見学候補に追加','button primary event-plan-button',()=>{togglePlan(id);openEvent(id);},planned?'check':'plus');planButton.setAttribute('aria-pressed',String(planned));dialog.append(planButton,el('p','modal-footnote','見学候補への追加は予約ではありません。候補のIDだけをこのブラウザーに保存します。'));openDialog(dialog);}
 function togglePlan(id){state.planned.has(id)?state.planned.delete(id):state.planned.add(id);try{if(state.planned.size)localStorage.setItem(state.storageKey,JSON.stringify([...state.planned]));else localStorage.removeItem(state.storageKey);}catch{toast('候補はこの画面で保持します。ブラウザーの保存機能が使えません。');}render();}
-function resetFilters(){state.query='';state.planOnly=false;state.categories=new Set(state.colors.keys());$('#search').value='';renderFilters();render();}
+function resetFilters() {
+  state.query = '';
+  state.planOnly = false;
+  state.categories = new Set(state.colors.keys());
+  state.hiddenLabs.clear();
+  saveHiddenLabs();
+  $('#search').value = '';
+  renderFilters();
+  renderLabFilters();
+  render();
+}
+$('#show-all-labs').addEventListener('click',()=>setAllLabsVisible(true));
+$('#hide-all-labs').addEventListener('click',()=>setAllLabsVisible(false));
 $('#reset-filters').addEventListener('click',resetFilters);
 $('#search').addEventListener('input',event=>{state.query=event.target.value.trim();render();});
 $('#plan-filter').addEventListener('click',()=>{state.planOnly=!state.planOnly;render();});

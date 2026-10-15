@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   normalizeSchedule, getWeekDays, shiftDate, getTodayInJapan,
-  layoutDayEvents, findConflicts, createCalendar, SCHEDULE_LIMITS,
+  layoutDayEvents, findConflicts, createCalendar, SCHEDULE_LIMITS, filterScheduleEvents,
 } from '../src/schedule.mjs';
 
 const session = (changes = {}) => ({ id: 'visit-1', date: '2026-10-15', start: '10:00', end: '11:00', ...changes });
@@ -237,6 +237,43 @@ test('ICS includes timezone and correct local times, escaping and UTF-8 line fol
   assert.ok(unfolded.includes('URL:https://example.com/visits'));
   assert.ok(unfolded.includes('\\n\\n要予約'));
   assert.equal((createCalendar([]).match(/BEGIN:VEVENT/g) ?? []).length, 0);
+});
+
+test('hiding a lab removes all its visits by ID and preserves another lab with the same name', () => {
+  const input = document();
+  input.labs[0].sessions.push(session({ id: 'visit-2', date: '2026-10-16', end: '' }));
+  input.labs.push({ ...structuredClone(input.labs[0]), id: 'sample-b' });
+  const events = normalizeSchedule(input).events;
+  const hiddenLabs = new Set(['sample-a']);
+  const visible = filterScheduleEvents(events, { hiddenLabs });
+  assert.deepEqual(visible.map(({ id }) => id), ['sample-b:visit-1', 'sample-b:visit-2']);
+  assert.equal(events.length, 4);
+  assert.deepEqual([...hiddenLabs], ['sample-a']);
+});
+
+test('lab visibility combines with category, search and saved-plan filters', () => {
+  const input = document();
+  input.labs[0].sessions[0].location = '北棟';
+  input.labs.push({ id: 'sample-b', name: 'サンプルB研究室', category: '情報', sessions: [session({ location: '北棟' })] });
+  input.labs.push({ id: 'sample-c', name: 'サンプルC研究室', category: '数理', sessions: [session({ location: '北棟' })] });
+  const events = normalizeSchedule(input).events;
+  const planned = new Set(events.map(({ id }) => id));
+  const options = { categories: new Set(['情報']), hiddenLabs: new Set(['sample-a']), query: ' 北棟 ', planned, planOnly: true };
+  assert.deepEqual(filterScheduleEvents(events, options).map(({ id }) => id), ['sample-b:visit-1']);
+  assert.deepEqual(filterScheduleEvents(events, { ...options, query: '別の棟' }), []);
+  assert.deepEqual(filterScheduleEvents(events, { ...options, planned: new Set(['sample-a:visit-1']) }), []);
+  assert.equal(planned.size, 3);
+});
+
+test('all labs can be hidden and restored without changing the source or saved candidates', () => {
+  const events = eventsFrom([session(), session({ id: 'visit-2', date: '2026-10-16' })]);
+  const before = structuredClone(events);
+  const planned = new Set(['sample-a:visit-1']);
+  assert.deepEqual(filterScheduleEvents(events, { hiddenLabs: new Set(['sample-a']), planned }), []);
+  assert.deepEqual(filterScheduleEvents(events, { hiddenLabs: new Set(), planned }), events);
+  assert.deepEqual(filterScheduleEvents(events, { categories: new Set() }), []);
+  assert.deepEqual(events, before);
+  assert.deepEqual([...planned], ['sample-a:visit-1']);
 });
 
 test('sample data is valid, fictional and contains two weeks of sessions', async () => {
