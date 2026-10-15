@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="研究室見学の日程をひと目で。手元のJSONを読み込んで、見学候補を自分だけのカレンダーにまとめられます。">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Lab Visit — 研究室見学カレンダー</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#schedule">予定へスキップ</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Lab Visit ホーム"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.7"/><path d="M8 3v4M16 3v4M4 10h16m-11 4 2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Lab Visit<span class="brand-sub">研究室見学カレンダー</span></a>
+    <div class="header-actions"><button class="button quiet" id="help-button" aria-label="使い方"><span data-icon="help"></span><span class="desktop-label">使い方</span></button><button class="button primary" data-import><span data-icon="upload"></span>JSONを読み込む</button></div>
+  </header>
+  <main class="page">
+    <section class="intro" aria-labelledby="page-title"><div><p class="eyebrow">A LITTLE PLANNING, A NEW POSSIBILITY.</p><h1 id="page-title">見学の予定を、ひと目で。</h1><p class="intro-description">気になる研究室を見つけて、自分らしい見学プランを。</p></div><div class="privacy-note"><span data-icon="shield"></span><div><strong>データは、あなたの手元に。</strong><span>読み込んだJSONは外部に送信されません。</span></div></div></section>
+    <div class="workspace">
+      <aside class="sidebar" aria-label="日付と表示条件">
+        <div class="mini-calendar"><div class="mini-heading"><strong id="mini-month"></strong><div><button class="icon-button" id="mini-prev" aria-label="前の月"><span data-icon="left"></span></button><button class="icon-button" id="mini-next" aria-label="次の月"><span data-icon="right"></span></button></div></div><div class="mini-weekdays" aria-hidden="true"><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span><span>日</span></div><div class="mini-days" id="mini-days" aria-label="日付を選択"></div></div>
+        <div class="sidebar-divider"></div>
+        <label class="search-field"><span data-icon="search"></span><input id="search" type="search" placeholder="研究室・場所を検索" aria-label="研究室名、分野、場所、メモで検索" autocomplete="off"></label>
+        <div class="filter-heading"><h2>研究分野</h2><button class="text-button" id="reset-filters">リセット</button></div><div id="category-filters" class="category-filters"><p class="muted small">JSONを読み込むと表示されます</p></div>
+        <div class="sidebar-divider"></div>
+        <button class="plan-filter" id="plan-filter" aria-pressed="false"><span data-icon="bookmark"></span><span>マイプラン</span><span class="count" id="plan-count">0</span></button><p class="sidebar-hint">予定を開いて、見学候補に追加。<br>時間の重なりも確認できます。</p>
+        <div class="data-card"><span class="status-dot"></span><strong id="data-label">データ未読み込み</strong><p id="data-description">配布されたJSONファイルを<br>読み込んではじめましょう。</p><button class="text-button" id="data-manage">データについて<span data-icon="right"></span></button></div>
+      </aside>
+      <section class="schedule-panel" id="schedule" aria-label="見学の日程" tabindex="-1">
+        <div class="calendar-toolbar"><div class="period-controls"><h2 id="period-title"></h2><div class="week-controls"><button class="icon-button" id="prev-week" aria-label="前の週"><span data-icon="left"></span></button><button class="icon-button" id="next-week" aria-label="次の週"><span data-icon="right"></span></button></div><button class="button today-button" id="today-button">今日</button></div><div class="view-switch" aria-label="表示形式"><button id="week-view" aria-pressed="true"><span data-icon="calendar"></span>週間</button><button id="list-view" aria-pressed="false"><span data-icon="list"></span>一覧</button></div></div>
+        <div class="calendar-subbar"><div class="subbar-info"><span id="visible-count">今週の見学 0件</span><span class="sample-badge" id="sample-badge" hidden>サンプルデータ</span></div><button class="text-button" id="export-button" disabled><span data-icon="download"></span>プランを書き出す</button></div>
+        <div id="conflict-banner" class="conflict-banner" role="status" hidden></div>
+        <div id="calendar-content"></div>
+        <div class="calendar-footer"><span><span class="legend-dot"></span>予定をクリックして詳細を表示</span><span>日本標準時（JST）</span></div>
+      </section>
+    </div>
+    <footer class="page-footer"><p>次の一歩につながる、研究室との出会いを。</p><a href="https://github.com/samiosu/kenkyuusitu_calender" target="_blank" rel="noopener noreferrer">GitHub<span data-icon="external"></span></a></footer>
+  </main>
+  <dialog id="import-dialog" class="modal" aria-labelledby="import-title"><div class="modal-heading"><span class="modal-symbol" data-icon="upload"></span><button class="icon-button" data-close aria-label="閉じる"><span data-icon="close"></span></button></div><h2 id="import-title">見学の日程を読み込む</h2><p class="modal-description">配布されたJSONファイルを選んでください。<br>研究室名や日程は、このブラウザー内だけで扱います。</p><div class="drop-zone" id="drop-zone"><span data-icon="file"></span><strong>ここにJSONファイルをドロップ</strong><span>または</span><button class="button primary" id="choose-file">ファイルを選択</button><small>JSON形式・1 MiBまで</small></div><p id="import-error" class="error-message" role="alert" hidden></p><div class="sample-row"><div><strong>まずは使い心地を試す</strong><span>架空の研究室を使ったサンプルです。</span></div><button class="button" id="load-sample">サンプルを表示<span data-icon="right"></span></button></div><details class="format-help"><summary>JSONの形式について</summary><p>研究室ごとに名前・分野と、日付・開始時刻・終了時刻を記入します。詳しい形式はGitHubのREADMEで確認できます。</p><a href="./examples/schedule.sample.json" download="schedule.sample.json">サンプルJSONをダウンロード<span data-icon="download"></span></a></details><p class="modal-footnote"><span data-icon="shield"></span>再読み込み後は、もう一度ファイルを選択してください。</p></dialog>
+  <dialog id="event-dialog" class="modal event-modal" aria-labelledby="event-title"></dialog>
+  <dialog id="help-dialog" class="modal" aria-labelledby="help-title"><div class="modal-heading"><span class="modal-symbol" data-icon="calendar"></span><button class="icon-button" data-close aria-label="閉じる"><span data-icon="close"></span></button></div><p class="eyebrow">HOW IT WORKS</p><h2 id="help-title">見学の計画を、3ステップで。</h2><ol class="help-steps"><li><span>01</span><div><strong>日程のJSONを読み込む</strong><p>配布されたファイルを選択。データが外部に送信されることはありません。</p></div></li><li><span>02</span><div><strong>気になる研究室を探す</strong><p>週間カレンダーや一覧で日程を比較。分野やキーワードでも絞り込めます。</p></div></li><li><span>03</span><div><strong>自分の見学プランをつくる</strong><p>予定の詳細から候補を追加。重複を確認し、カレンダー用ファイル（.ics）に書き出せます。</p></div></li></ol><p class="modal-footnote">候補への追加は予約ではありません。参加方法や最新の日程は、各研究室の案内をご確認ください。</p><button class="button primary full-width" data-close>はじめる</button></dialog>
+  <input id="file-input" type="file" accept=".json,application/json" hidden>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p class="noscript">このページを使うにはJavaScriptを有効にしてください。</p></noscript>
+</body>
+</html>

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "title": "研究室見学カレンダー（架空のサンプル）",
+  "updatedAt": "2026-10-10",
+  "labs": [
+    {
+      "id": "sample-a",
+      "name": "サンプルA研究室",
+      "category": "情報・AI",
+      "description": "データと機械学習をテーマにした架空の研究室です。日程・場所はすべてデモ用です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-12", "start": "10:00", "end": "11:00", "location": "サンプル棟 A-101", "note": "研究紹介とデモ体験。開始5分前を目安にお越しください。", "reservationRequired": false },
+        { "id": "visit-2", "date": "2026-10-14", "start": "13:00", "end": "14:00", "location": "サンプル棟 A-101", "note": "少人数での質問会を予定しています。", "reservationRequired": true },
+        { "id": "visit-3", "date": "2026-10-19", "start": "10:00", "end": "11:00", "location": "サンプル棟 A-101", "reservationRequired": false },
+        { "id": "visit-4", "date": "2026-10-21", "start": "14:00", "end": "15:30", "location": "サンプル棟 A-101", "note": "研究紹介の後、学生との交流時間があります。", "reservationRequired": true }
+      ]
+    },
+    {
+      "id": "sample-b",
+      "name": "サンプルB研究室",
+      "category": "情報・AI",
+      "description": "ネットワークと情報システムをテーマにした架空の研究室です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-12", "start": "10:30", "end": "11:30", "location": "サンプル棟 A-202", "note": "見学は予約不要です。", "reservationRequired": false },
+        { "id": "visit-2", "date": "2026-10-15", "start": "10:00", "end": "11:00", "location": "サンプル棟 A-202", "reservationRequired": false },
+        { "id": "visit-3", "date": "2026-10-20", "start": "13:00", "end": "14:00", "location": "サンプル棟 A-202", "note": "事前予約が必要です。このサンプルでは予約できません。", "reservationRequired": true },
+        { "id": "visit-4", "date": "2026-10-23", "start": "10:00", "end": "11:00", "location": "サンプル棟 A-202", "reservationRequired": false }
+      ]
+    },
+    {
+      "id": "sample-c",
+      "name": "サンプルC研究室",
+      "category": "デザイン・メディア",
+      "description": "人とコンピューターの関わりを考える架空の研究室です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-13", "start": "13:00", "end": "14:30", "location": "サンプル棟 B-103", "note": "インタラクティブな作品の体験を含みます。", "reservationRequired": true },
+        { "id": "visit-2", "date": "2026-10-15", "start": "13:00", "end": "14:00", "location": "サンプル棟 B-103", "reservationRequired": false },
+        { "id": "visit-3", "date": "2026-10-19", "start": "13:30", "end": "15:00", "location": "サンプル棟 B-103", "reservationRequired": true },
+        { "id": "visit-4", "date": "2026-10-22", "start": "10:00", "end": "11:00", "location": "サンプル棟 B-103", "note": "研究室の雰囲気を知るオープン見学です。", "reservationRequired": false }
+      ]
+    },
+    {
+      "id": "sample-d",
+      "name": "サンプルD研究室",
+      "category": "デザイン・メディア",
+      "description": "映像と音、表現技術をテーマにした架空の研究室です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-13", "start": "14:00", "end": "15:00", "location": "サンプル棟 B-204", "reservationRequired": false },
+        { "id": "visit-2", "date": "2026-10-16", "start": "10:00", "end": "11:30", "location": "サンプル棟 B-204", "note": "作品紹介と学生による研究説明を行います。", "reservationRequired": true },
+        { "id": "visit-3", "date": "2026-10-20", "start": "14:00", "end": "15:00", "location": "サンプル棟 B-204", "reservationRequired": false },
+        { "id": "visit-4", "date": "2026-10-23", "start": "13:00", "end": "14:00", "location": "サンプル棟 B-204", "reservationRequired": false }
+      ]
+    },
+    {
+      "id": "sample-e",
+      "name": "サンプルE研究室",
+      "category": "ロボティクス",
+      "description": "ロボットの知覚と制御をテーマにした架空の研究室です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-12", "start": "13:00", "end": "14:30", "location": "サンプル棟 C-101", "note": "動きやすい服装を想定したデモ用の見学です。", "reservationRequired": true },
+        { "id": "visit-2", "date": "2026-10-14", "start": "13:30", "end": "14:30", "location": "サンプル棟 C-101", "reservationRequired": false },
+        { "id": "visit-3", "date": "2026-10-21", "start": "13:30", "end": "14:30", "location": "サンプル棟 C-101", "note": "事前予約が必要です。このサンプルでは予約できません。", "reservationRequired": true },
+        { "id": "visit-4", "date": "2026-10-22", "start": "15:00", "end": "16:00", "location": "サンプル棟 C-101", "reservationRequired": false }
+      ]
+    },
+    {
+      "id": "sample-f",
+      "name": "サンプルF研究室",
+      "category": "数理・シミュレーション",
+      "description": "数理モデルとシミュレーションをテーマにした架空の研究室です。",
+      "sessions": [
+        { "id": "visit-1", "date": "2026-10-13", "start": "10:00", "end": "11:00", "location": "サンプル棟 C-203", "reservationRequired": false },
+        { "id": "visit-2", "date": "2026-10-15", "start": "13:30", "end": "14:30", "location": "サンプル棟 C-203", "note": "研究テーマの紹介後に質疑応答があります。", "reservationRequired": false },
+        { "id": "visit-3", "date": "2026-10-16", "start": "14:00", "end": "15:00", "location": "サンプル棟 C-203", "reservationRequired": true },
+        { "id": "visit-4", "date": "2026-10-20", "start": "13:30", "end": "14:30", "location": "サンプル棟 C-203", "reservationRequired": false }
+      ]
+    }
+  ]
+}

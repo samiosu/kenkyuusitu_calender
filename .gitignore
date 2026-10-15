@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.local.json
+private/
+data/
+.env
+.env.*
+qa/
+.qa/
+*.local.png
+*.local.webp
+test-results/
+playwright-report/
